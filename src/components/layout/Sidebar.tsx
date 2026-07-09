@@ -827,38 +827,6 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
           </div>
         )}
 
-        {/* Admin */}
-        {esSuperAdmin && adminEmpresasMatchesQuery(menuSearchQuery) && (
-          <div className="mt-6 border-t border-[color:var(--zentra-sidebar-border)] pt-4">
-            {!collapsed && (
-              <div className="mb-2 flex items-center gap-2 px-3">
-                <span className="h-1 w-1 rounded-full bg-amber-400" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  Admin
-                </p>
-                <span className="h-px flex-1 bg-gradient-to-r from-white/[0.08] to-transparent" />
-              </div>
-            )}
-            <Link
-              href="/admin/empresas"
-              className={`relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
-                (pathname ?? "").startsWith("/admin/empresas")
-                  ? "bg-gradient-to-r from-amber-400/15 via-amber-400/8 to-transparent font-semibold text-amber-100"
-                  : "font-medium text-amber-300/90 hover:bg-white/[0.04] hover:text-amber-200"
-              }`}
-              title="Admin Empresas"
-            >
-              {(pathname ?? "").startsWith("/admin/empresas") ? (
-                <span
-                  aria-hidden="true"
-                  className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.6)]"
-                />
-              ) : null}
-              <Building2 className="h-[18px] w-[18px] shrink-0" />
-              {!collapsed && <span className="truncate">Admin Empresas</span>}
-            </Link>
-          </div>
-        )}
       </nav>
     </motion.aside>
   );
