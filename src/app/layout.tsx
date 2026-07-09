@@ -20,8 +20,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Neura ERP",
-  description: "Sistema de gestión empresarial de Neura",
+  title: "Odonto Excellence",
+  description: "Sistema de gestión Odonto Excellence",
 };
 
 export default function RootLayout({
