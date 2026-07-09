@@ -7,6 +7,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * (además de lo que ya tengas para auth/storage).
  */
 export const SUPABASE_APP_SCHEMA: string =
+  process.env.NEURA_CLIENT_SCHEMA?.trim() ||
+  process.env.NEXT_PUBLIC_NEURA_CLIENT_SCHEMA?.trim() ||
   process.env.APP_DB_SCHEMA?.trim() ||
   process.env.NEXT_PUBLIC_APP_DB_SCHEMA?.trim() ||
   "zentra_erp";
