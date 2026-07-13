@@ -73,13 +73,19 @@ export async function runCampaignProcessOnce(params: {
     return { processed: 0, remainingQueued: 0, campaignCompleted: st === "completed" || st === "cancelled" };
   }
 
+  // Recuperar SOLO destinatarios realmente atascados en "sending" (ej: la función
+  // murió/expiró a mitad de un envío). NO re-encolar filas que otra corrida acaba de
+  // reclamar hace segundos: eso reenviaba el mensaje. Umbral de obsolescencia.
+  const STALE_SENDING_MS = 3 * 60 * 1000;
+  const staleSendingBefore = new Date(Date.now() - STALE_SENDING_MS).toISOString();
   await supabase
     .from("chat_campaign_recipients")
     .update({ status: "queued", updated_at: new Date().toISOString() })
     .eq("empresa_id", empresaId)
     .eq("campaign_id", campaignId)
     .eq("status", "sending")
-    .is("provider_message_id", null);
+    .is("provider_message_id", null)
+    .lt("updated_at", staleSendingBefore);
 
   if ((campaign as { template_id?: string | null }).template_id) {
     const tid = (campaign as { template_id: string }).template_id;
@@ -139,11 +145,20 @@ export async function runCampaignProcessOnce(params: {
     }
 
     const ts = new Date().toISOString();
-    await supabase
+    // Reclamo ATÓMICO: solo pasa a "sending" si sigue en "queued". Si otra corrida
+    // (otra pestaña / tick solapado / cron) ya lo reclamó, .select no devuelve filas
+    // y saltamos este destinatario → nunca se envía dos veces el mismo recipient.
+    const { data: claimed } = await supabase
       .from("chat_campaign_recipients")
       .update({ status: "sending", updated_at: ts })
       .eq("id", rec.id)
-      .eq("empresa_id", empresaId);
+      .eq("empresa_id", empresaId)
+      .eq("status", "queued")
+      .select("id");
+
+    if (!claimed || claimed.length === 0) {
+      continue;
+    }
 
     const send = await sendCampaignRecipientMessage({
       supabase,

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import {
   buildCampaignTemplatePreviewText,
@@ -143,16 +143,25 @@ export default function CampanasDetailClient({
     void load();
   }, [load]);
 
+  const processingRef = useRef(false);
   useEffect(() => {
     if (!campaign || campaign.status !== "sending") return;
     const t = window.setInterval(() => {
+      // Evitar solapamiento: si la corrida anterior sigue en curso, saltar este tick.
+      // (Un batch puede tardar más que el intervalo; solaparlos disparaba envíos dobles.)
+      if (processingRef.current) return;
+      processingRef.current = true;
       void (async () => {
-        await fetchWithSupabaseSession("/api/campanas/process", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ campaign_id: campaignId }),
-        });
-        await load();
+        try {
+          await fetchWithSupabaseSession("/api/campanas/process", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ campaign_id: campaignId }),
+          });
+          await load();
+        } finally {
+          processingRef.current = false;
+        }
       })();
     }, 4000);
     return () => window.clearInterval(t);
