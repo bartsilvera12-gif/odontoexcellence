@@ -46,6 +46,13 @@ export async function POST(request: NextRequest, ctx: RouteCtx) {
     const filename = typeof file.name === "string" ? file.name : "upload.xlsx";
     const parsed = parseCampaignSpreadsheet(buf, filename);
 
+    // Descartar filas completamente vacías: Excel suele arrastrar filas en blanco
+    // dentro del "rango usado" de la hoja. Antes inflaban el TOTAL y aparecían como
+    // inválidas (p. ej. 149 filas / 114 inválidas cuando el usuario cargó 35 reales).
+    parsed.rows = parsed.rows.filter((r) =>
+      Object.values(r).some((v) => String(v ?? "").trim() !== "")
+    );
+
     if (parsed.headers.length === 0 || parsed.rows.length === 0) {
       return NextResponse.json(errorResponse("El archivo no tiene filas de datos"), { status: 400 });
     }
