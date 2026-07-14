@@ -104,6 +104,12 @@ export default function CampanasDetailClient({
   const [busy, setBusy] = useState(false);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [showEvents, setShowEvents] = useState(false);
+  const [uploadState, setUploadState] = useState<"idle" | "uploading" | "done" | "error">("idle");
+  const [uploadInfo, setUploadInfo] = useState<
+    { fileName: string; rows: number; valid: number; invalid: number } | null
+  >(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetchWithSupabaseSession(`/api/campanas/${campaignId}`, { cache: "no-store" });
@@ -383,18 +389,32 @@ export default function CampanasDetailClient({
   async function uploadFile(file: File) {
     setBusy(true);
     setErr(null);
+    setUploadState("uploading");
+    setUploadInfo(null);
     const fd = new FormData();
     fd.append("file", file);
     const res = await fetchWithSupabaseSession(`/api/campanas/${campaignId}/import`, {
       method: "POST",
       body: fd,
     });
-    const json = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string };
+    const json = (await res.json().catch(() => ({}))) as {
+      success?: boolean;
+      error?: string;
+      data?: { rows?: number; valid_count?: number; invalid_count?: number };
+    };
     setBusy(false);
     if (!res.ok || !json.success) {
+      setUploadState("error");
       setErr(json.error ?? "Importación fallida");
       return;
     }
+    setUploadInfo({
+      fileName: file.name,
+      rows: Number(json.data?.rows ?? 0),
+      valid: Number(json.data?.valid_count ?? 0),
+      invalid: Number(json.data?.invalid_count ?? 0),
+    });
+    setUploadState("done");
     await load();
   }
 
@@ -613,16 +633,117 @@ export default function CampanasDetailClient({
           </h2>
         </div>
         <input
+          ref={fileInputRef}
           type="file"
           accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           disabled={!canImport || busy}
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) void uploadFile(f);
+            e.target.value = "";
           }}
-          className="block text-sm text-slate-600"
+          className="hidden"
         />
-        <p className="text-xs text-slate-500">Máximo 5.000 filas / 5 MB.</p>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (canImport && !busy) setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            if (!canImport || busy) return;
+            const f = e.dataTransfer.files?.[0];
+            if (f) void uploadFile(f);
+          }}
+          disabled={!canImport || busy}
+          className={`flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${
+            dragOver
+              ? "border-[#4FAEB2] bg-[#4FAEB2]/[0.06]"
+              : "border-slate-300 bg-slate-50/60 hover:border-[#4FAEB2] hover:bg-[#4FAEB2]/[0.04]"
+          } disabled:cursor-not-allowed disabled:opacity-60`}
+        >
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-7 w-7 text-[#4FAEB2]"
+          >
+            <path d="M12 16V4" />
+            <path d="m7 9 5-5 5 5" />
+            <path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2" />
+          </svg>
+          <span className="text-sm font-semibold text-slate-700">
+            Hacé clic para elegir tu archivo Excel
+          </span>
+          <span className="text-xs text-slate-500">
+            o arrastralo aquí · .xlsx / .csv · máximo 5.000 filas / 5 MB
+          </span>
+        </button>
+
+        {uploadState === "uploading" ? (
+          <div className="flex items-center gap-2 rounded-lg border border-[#4FAEB2]/30 bg-[#4FAEB2]/[0.06] px-3 py-2 text-sm text-[#3F8E91]">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              className="h-4 w-4 animate-spin text-[#4FAEB2]"
+            >
+              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+              <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+            <span className="font-medium">Cargando datos…</span>
+          </div>
+        ) : uploadState === "done" && uploadInfo ? (
+          <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+            <span>
+              <strong>Datos cargados.</strong> {uploadInfo.fileName} — {uploadInfo.valid}{" "}
+              {uploadInfo.valid === 1 ? "destinatario válido" : "destinatarios válidos"}
+              {uploadInfo.invalid > 0 ? ` · ${uploadInfo.invalid} inválidos omitidos` : ""}.
+            </span>
+          </div>
+        ) : uploadState === "idle" &&
+          typeof (campaign as Record<string, unknown>).import_original_filename === "string" &&
+          Number(campaign.total_count ?? 0) > 0 ? (
+          <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+            <span>
+              <strong>Datos cargados.</strong>{" "}
+              {String((campaign as Record<string, unknown>).import_original_filename)} —{" "}
+              {Number(campaign.total_count ?? 0)} filas. Podés volver a cargar otro archivo para reemplazarlas.
+            </span>
+          </div>
+        ) : null}
         {templateHasHeaderImage ? (
           <p className="text-xs text-slate-600">
             <strong>Imagen de cabecera (Meta):</strong> agregá una columna <code className="rounded bg-slate-100 px-1">header_image_url</code>{" "}
