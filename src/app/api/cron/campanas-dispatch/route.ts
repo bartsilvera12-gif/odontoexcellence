@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getChatPostgresPool } from "@/lib/supabase/chat-pg-pool";
 import { getChatServiceClientForEmpresa } from "@/app/api/chat/_chat-service-client";
 import { runCampaignProcessOnce } from "@/lib/campaigns/campaign-job-service";
+import { SUPABASE_APP_SCHEMA } from "@/lib/supabase/schema";
 import type { SupabaseAdmin } from "@/lib/chat/types";
 
 /**
@@ -56,9 +57,16 @@ async function resolverEmpresaIds(override?: string): Promise<string[]> {
     .filter(Boolean);
   if (fromEnv.length > 0) return fromEnv;
 
-  // Auto-resolver desde el schema configurado (single-client).
-  const schemaRaw = (process.env.APP_DB_SCHEMA ?? "neura").trim();
-  const schema = /^[a-z0-9_]+$/.test(schemaRaw) ? schemaRaw : "neura";
+  // Instancia single-client: la empresa está fijada por env (mismo id que usa el
+  // webhook de WhatsApp). Es la fuente más segura y evita tocar el tenant equivocado.
+  const single = (process.env.WHATSAPP_DEFAULT_EMPRESA_ID ?? "").trim();
+  if (single) return [single];
+
+  // Fallback: resolver desde el schema del cliente (NEURA_CLIENT_SCHEMA), NO desde
+  // un "neura" por defecto que pertenecería a otro tenant.
+  const schemaRaw = SUPABASE_APP_SCHEMA.trim();
+  const schema = /^[a-z0-9_]+$/.test(schemaRaw) ? schemaRaw : "";
+  if (!schema) return [];
   const pool = getChatPostgresPool();
   if (!pool) return [];
   const r = await pool.query(`SELECT id::text AS id FROM "${schema}".empresas`);
